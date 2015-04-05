@@ -332,7 +332,8 @@ New fetures in this stable release:
 #endif //HARDWARE_ARDUINO_DUE
 
 
-//#include "keyer.h" // uncomment this for pre-version October 2014 Sublime/Stino compilation; comment out for Arduino IDE (Arduino IDE will error out)
+// necessary for arduino-mk
+#include "keyer.h" // uncomment this for pre-version October 2014 Sublime/Stino compilation; comment out for Arduino IDE (Arduino IDE will error out)
 
 #ifdef HARDWARE_NANOKEYER_REV_B
 #include "keyer_features_and_options_nanokeyer_rev_b.h"
@@ -734,10 +735,10 @@ BasicTerm term(&Serial);
 #endif
 
 #if defined(DEBUG_AUX_SERIAL_PORT)
-HardwareSerial * debug_port;
+Serial_* debug_port;
 #endif
 
-HardwareSerial * main_serial_port;
+Serial_* main_serial_port;
 
 #ifdef FEATURE_PTT_INTERLOCK
 byte ptt_interlock_active = 0;
@@ -4776,7 +4777,7 @@ void boop_beep()
 
 
 //-------------------------------------------------------------------------------------------------------
-void send_the_dits_and_dahs(char * cw_to_send){
+void send_the_dits_and_dahs(const char * cw_to_send){
 
 
   for (int x = 0;x < 12;x++){
@@ -6916,7 +6917,9 @@ void print_serial_help(){
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
 void process_serial_command() {
   
+  #ifdef FEATURE_CMOS_SUPER_KEYER_IAMBIC_B_TIMING
   int user_input_temp = 0;
+  #endif //FEATURE_CMOS_SUPER_KEYER_IAMBIC_B_TIMING
         
   main_serial_port->println();
   switch (incoming_serial_byte) {
@@ -7437,11 +7440,10 @@ void serial_set_weighting()
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
 void serial_tune_command ()
 {
-  byte incoming;
 
   delay(100);
   while (main_serial_port->available() > 0) {  // clear out the buffer if anything is there
-    incoming = main_serial_port->read();
+    main_serial_port->read();
   }
 
   tx_and_sidetone_key(1,MANUAL_SENDING);
@@ -7450,7 +7452,7 @@ void serial_tune_command ()
   while ((main_serial_port->available() == 0) && (!analogbuttonread(0))) {}  // keystroke or button0 hit gets us out of here
   #endif
   while (main_serial_port->available() > 0) {  // clear out the buffer if anything is there
-    incoming = main_serial_port->read();
+    main_serial_port->read();
   }
   tx_and_sidetone_key(0,MANUAL_SENDING);
 
@@ -10535,7 +10537,6 @@ void MouseRptParser::OnMouseMove(MOUSEINFO *mi){
     int current_dY = (mi->dY);
 
     /* X/Y method - doesn't work too well
-    /*
     if ((current_dX != last_dX) && (abs(current_dX) > abs(current_dY)) && (abs(current_dX) > 3)){
       dit_buffer = 1;
     } 

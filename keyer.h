@@ -82,3 +82,11 @@ void wakeup(void);
 void serial_cw_practice(void);
 void serial_set_farnsworth(void);
 void us_callsign_practice(void);
+
+
+// stuff that is missing for some reason??? (CL, 2015-04-04)
+int paddle_pin_read(int pin_to_read);
+void send_char(char cw_char, byte omit_letterspace);
+void tx_and_sidetone_key (int state, byte sending_type);
+void switch_to_tx_silent(byte tx);
+void initialize_cw_keyboard();

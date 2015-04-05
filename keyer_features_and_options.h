@@ -2,14 +2,14 @@
 // FEATURES add more bytes to the compiled binary, OPTIONS change code behavior
 
 //#define FEATURE_COMMAND_BUTTONS
-//#define FEATURE_COMMAND_LINE_INTERFACE        // (this no longer requires FEATURE_SERIAL)
+#define FEATURE_COMMAND_LINE_INTERFACE        // (this no longer requires FEATURE_SERIAL)
 //#define FEATURE_MEMORIES
 //#define FEATURE_MEMORY_MACROS
 //#define FEATURE_WINKEY_EMULATION    // disabling Automatic Software Reset is highly recommended (see documentation) (this no longer requires FEATURE_SERIAL)
 //#define FEATURE_BEACON
 //#define FEATURE_CALLSIGN_RECEIVE_PRACTICE
 //#define FEATURE_POTENTIOMETER         // do not enable unless you have a potentiometer connected, otherwise noise will falsely trigger wpm changes
-//#define FEATURE_SERIAL_HELP
+#define FEATURE_SERIAL_HELP
 //#define FEATURE_HELL
 //#define FEATURE_PS2_KEYBOARD        // Use a PS2 keyboard to send code - Change keyboard layout (non-US) in K3NG_PS2Keyboard.h.  Additional options below.
 //#define FEATURE_USB_KEYBOARD          // Use a USB keyboard to send code 
@@ -34,7 +34,7 @@
 //#define FEATURE_PTT_INTERLOCK 
 //#define FEATURE_QLF
 
-//#define OPTION_SUPPRESS_SERIAL_BOOT_MSG
+#define OPTION_SUPPRESS_SERIAL_BOOT_MSG
 #define OPTION_INCLUDE_PTT_TAIL_FOR_MANUAL_SENDING
 #define OPTION_EXCLUDE_PTT_HANG_TIME_FOR_MANUAL_SENDING
 //#define OPTION_SERIAL_PORT_DEFAULT_WINKEY_EMULATION  // Use when activating both FEATURE_WINKEY_EMULATION and FEATURE_COMMAND_LINE_INTERFACE simultaneously.  This will make Winkey emulation be the default at boot up; hold command button down at boot up to activate CLI mode
@@ -59,7 +59,7 @@
 //#define OPTION_KEEP_PTT_KEYED_WHEN_CHARS_BUFFERED    // this option keeps PTT high if there are characters buffered from the keyboard, the serial interface, or Winkey
 //#define OPTION_DISPLAY_NON_ENGLISH_EXTENSIONS  // LCD display suport for non-English (NO/DK/DE) characters - Courtesy of OZ1JHM
 //#define OPTION_UNKNOWN_CHARACTER_ERROR_TONE
-//#define OPTION_DO_NOT_SAY_HI
+#define OPTION_DO_NOT_SAY_HI
 //#define OPTION_USE_ORIGINAL_VERSION_2_1_PS2KEYBOARD_LIB //use version 2.1 PS2Keyboard.h and PS2Keyboard.cpp for FEATURE_PS2_KEYBOARD
 //#define OPTION_PS2_NON_ENGLISH_CHAR_LCD_DISPLAY_SUPPORT // makes some non-English characters from the PS2 keyboard display correctly in the LCD display (donated by Marcin sp5iou)
 //#define OPTION_PS2_KEYBOARD_RESET // reset the PS2 keyboard upon startup with 0xFF (contributed by Bill, W9BEL)
