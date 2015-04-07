@@ -6830,8 +6830,6 @@ void check_serial(){
 #if defined(FEATURE_SERIAL)
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
 void print_serial_help(){
-
-  
   main_serial_port->println(F("\n\rK3NG Keyer Help\n\r"));
   main_serial_port->println(F("CLI commands:"));
   main_serial_port->println(F("\\#\t\t: play memory # x"));
@@ -6882,6 +6880,8 @@ void print_serial_help(){
   main_serial_port->println(F("\\.\t\t: Toggle dit buffer on/off"));
   main_serial_port->println(F("\\-\t\t: Toggle dah buffer on/off"));
   #endif //FEATURE_DIT_DAH_BUFFER_CONTROL  
+
+  #ifdef FEATURE_MEMORY_MACROS
   main_serial_port->println(F("\nMemory Macros:"));
   main_serial_port->println(F("\\#\t\t: Jump to memory #"));
   #ifdef FEATURE_HELL
@@ -6905,6 +6905,7 @@ void print_serial_help(){
   main_serial_port->println(F("\\Z#\t\t: Decrease speed # WPM"));
   main_serial_port->println(F("\\^\t\t: Toggle send CW immediately"));
   main_serial_port->println(F("\\+\t\t: Prosign"));
+  #endif //FEATURE_MEMORY_MACROS
 
 
 }
@@ -6923,7 +6924,8 @@ void process_serial_command() {
         
   main_serial_port->println();
   switch (incoming_serial_byte) {
-    case 126: asm volatile ("jmp 0"); /*wdt_enable(WDTO_30MS); while(1) {} ;*/ break;  // ~ - reset unit
+    case 126:
+      main_serial_port->println("Self-reset is not supported! Reset with paddles held down to clear settings."); break;
     case 42:                                                // * - paddle echo on / off
       if (cli_paddle_echo) {
         cli_paddle_echo = 0;
