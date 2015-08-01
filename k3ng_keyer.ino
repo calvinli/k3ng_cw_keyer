@@ -88,13 +88,7 @@ Full documentation can be found at http://blog.radioartisan.com/arduino-cw-keyer
 
 #include <stdio.h>
 
-#ifndef HARDWARE_ARDUINO_DUE
- #include <EEPROM.h>
-#else
- #include <SPI.h>
-#endif //HARDWARE_ARDUINO_DUE
-
-#include <avr/pgmspace.h>
+#include <EEPROM.h>
 
 #ifndef HARDWARE_ARDUINO_DUE
  #include <avr/wdt.h>
@@ -1487,6 +1481,8 @@ void print_serial_help(){
   #ifdef FEATURE_AUTOSPACE
   main_serial_port->println(F("\\Z\t\t: Autospace on/off"));
   #endif //FEATURE_AUTOSPACE
+  main_serial_port->println(F("\\*\t\t: Toggle paddle echo"));
+  main_serial_port->println(F("\\:\t\t: Toggle CW echo"));
   main_serial_port->println(F("\\\\\t\t: Empty keyboard send buffer"));
 }
 #endif //FEATURE_COMMAND_LINE_INTERFACE
@@ -2101,6 +2097,10 @@ void initialize_pins()
     digitalWrite(ptt_interlock,HIGH);
   }
   #endif //FEATURE_PTT_INTERLOCK
+
+  // something is causing the LED to go high at start. undo that.
+  pinMode(13, OUTPUT);
+  digitalWrite(13, LOW);
 }
 
 
