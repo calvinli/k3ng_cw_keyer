@@ -14,7 +14,7 @@
  Copyright 1340 BC, 2010, 2011, 2012, 2013, 2014 Anthony Good, K3NG
  All trademarks referred to in source code and documentation are copyright their respective owners.
 
-    
+
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -27,7 +27,7 @@
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
-    
+
 
 If you offer a hardware kit using this software, show your appreciation by sending the author a complimentary kit or a bottle of bourbon ;-)
 
@@ -68,14 +68,14 @@ Full documentation can be found at http://blog.radioartisan.com/arduino-cw-keyer
     \!##   Repeat play memory
     \|#### Set memory repeat (milliseconds)
     \&     Toggle CMOS Super Keyer Timing on/off
-    \%##   Set CMOS Super Keyer Timing %     
+    \%##   Set CMOS Super Keyer Timing %
     \.     Toggle dit buffer on/off
     \-     Toggle dah buffer on/off
     \~     Reset unit
     \:     Toggle cw send echo
     \{     QLF mode on/off
 
- 
+
  Useful Stuff
     Reset to defaults: squeeze both paddles at power up (good to use if you dorked up the speed and don't have the CLI)
     Press the right paddle to enter straight key mode at power up
@@ -94,7 +94,6 @@ Full documentation can be found at http://blog.radioartisan.com/arduino-cw-keyer
 #include "keyer.h"
 
 #include "keyer_features_and_options.h"
-#include "keyer_debug.h"
 #include "keyer_pin_settings.h"
 #include "keyer_settings.h"
 
@@ -102,34 +101,26 @@ Full documentation can be found at http://blog.radioartisan.com/arduino-cw-keyer
  #define FEATURE_SERIAL
 #endif
 
-
 // Variables and stuff
 struct config_t {  // 23 bytes
   unsigned int wpm;
-  byte paddle_mode;
-  byte keyer_mode;
-  byte sidetone_mode;
+  byte paddle_mode; /* Normal or Reversed */
+  byte keyer_mode;  /* Iambic A or Iambic B */
   unsigned int hz_sidetone;
   unsigned int dah_to_dit_ratio;
-  byte pot_activated;
   byte length_wordspace;
-  byte autospace_active;
-  unsigned int wpm_farnsworth;
   byte current_ptt_line;
   byte current_tx;
   byte weighting;
-  unsigned int memory_repeat_time;
   byte dit_buffer_off;
   byte dah_buffer_off;
-  byte cmos_super_keyer_iambic_b_timing_percent;
-  byte cmos_super_keyer_iambic_b_timing_on;
 } configuration;
 
 
 byte command_mode_disable_tx = 0;
 byte current_tx_key_line = tx_key_line_1;
 byte manual_ptt_invoke = 0;
-byte machine_mode = 0;   // NORMAL, BEACON, COMMAND
+byte machine_mode = 0;   // NORMAL, COMMAND
 byte key_tx = 0;         // 0 = tx_key_line control suppressed
 byte dit_buffer = 0;     // used for buffering paddle hits in iambic operation
 byte dah_buffer = 0;     // used for buffering paddle hits in iambic operation
@@ -137,14 +128,12 @@ byte button0_buffer = 0;
 byte being_sent = 0;     // SENDING_NOTHING, SENDING_DIT, SENDING_DAH
 byte key_state = 0;      // 0 = key up, 1 = key down
 byte config_dirty = 0;
-unsigned long ptt_time = 0; 
+unsigned long ptt_time = 0;
 byte ptt_line_activated = 0;
-byte speed_mode = SPEED_NORMAL;
 byte pause_sending_buffer = 0;
 byte length_letterspace = default_length_letterspace;
 byte keying_compensation = default_keying_compensation;
 byte first_extension_time = default_first_extension_time;
-byte last_sending_type = MANUAL_SENDING;
 byte iambic_flag = 0;
 unsigned long last_config_write = 0;
 
@@ -167,9 +156,6 @@ byte send_buffer_array[send_buffer_size];
 byte send_buffer_bytes = 0;
 byte send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
 
-#if defined(FEATURE_SERIAL)
-byte serial_mode = SERIAL_NORMAL;
-#endif //FEATURE_SERIAL
 
 #define SIDETONE_HZ_LOW_LIMIT 299
 #define SIDETONE_HZ_HIGH_LIMIT 2001
@@ -177,20 +163,19 @@ byte serial_mode = SERIAL_NORMAL;
 Serial_* main_serial_port;
 
 /*  vvv  written by the original author! :O ---CL, 2015-04-06  */
-//---------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 
 // this code is a friggin work of art.  free as in beer software sucks.
 
 
-//---------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 void setup()
 {
   initialize_pins();
   initialize_keyer_state();
   check_eeprom_for_initialization();
-  check_for_beacon_mode();
   initialize_serial_port();
 }
 
@@ -200,16 +185,16 @@ void loop()
     check_paddles();
     service_dit_dah_buffers();
 
-    #if defined(FEATURE_SERIAL)       
+    #if defined(FEATURE_SERIAL)
     check_serial();
-    check_paddles();            
+    check_paddles();
     service_dit_dah_buffers();
-    #ifdef FEATURE_COMMAND_LINE_INTERFACE  
+    #ifdef FEATURE_COMMAND_LINE_INTERFACE
     service_serial_paddle_echo();
     #endif //FEATURE_COMMAND_LINE_INTERFACE
     #endif //FEATURE_SERIAL
 
-    service_send_buffer(PRINTCHAR);
+    service_send_buffer();
     check_ptt_tail();
 
     check_for_dirty_configuration();
@@ -226,9 +211,6 @@ void loop()
 //-------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------
 
-/*
- * Write the configuration to EEPROM if it is dirty.
- */
 void check_for_dirty_configuration()
 {
   if ((config_dirty) && ((millis()-last_config_write)>30000)) {
@@ -237,19 +219,17 @@ void check_for_dirty_configuration()
   }
 }
 
-
 void check_paddles()
 {
   check_dit_paddle();
   check_dah_paddle();
 }
 
-
 void ptt_key()
 {
   if (ptt_line_activated == 0) {   // if PTT is currently deactivated, bring it up and insert PTT lead time delay
     if (configuration.current_ptt_line) {
-      digitalWrite (configuration.current_ptt_line, HIGH);    
+      digitalWrite (configuration.current_ptt_line, HIGH);
       delay(0); // formerly ptt lead time
     }
     ptt_line_activated = 1;
@@ -278,8 +258,8 @@ void check_ptt_tail()
   }
 }
 
-void write_settings_to_eeprom(int initialize_eeprom)
-{  
+void write_settings_to_eeprom(byte initialize_eeprom)
+{
   if (initialize_eeprom) {
     EEPROM.write(0,eeprom_magic_number);
   }
@@ -288,10 +268,9 @@ void write_settings_to_eeprom(int initialize_eeprom)
   unsigned int i;
   int ee = 1;  // starting point of configuration struct
   for (i = 0; i < sizeof(configuration); i++){
-    EEPROM.write(ee++, *p++);  
+    EEPROM.write(ee++, *p++);
   }
 }
-
 
 int read_settings_from_eeprom()
 {
@@ -300,9 +279,9 @@ int read_settings_from_eeprom()
     unsigned int i;
     int ee = 1; // starting point of configuration struct
     for (i = 0; i < sizeof(configuration); i++){
-      *p++ = EEPROM.read(ee++);  
+      *p++ = EEPROM.read(ee++);
     }
-  
+
     switch_to_tx_silent(configuration.current_tx);
     config_dirty = 0;
     return 0;
@@ -310,7 +289,6 @@ int read_settings_from_eeprom()
     return 1;
   }
 }
-
 
 void check_dit_paddle()
 {
@@ -332,7 +310,6 @@ void check_dit_paddle()
   }
 }
 
-
 void check_dah_paddle()
 {
   byte pin_value = 0;
@@ -345,7 +322,7 @@ void check_dah_paddle()
   }
 
   pin_value = paddle_pin_read(dah_paddle);
-  
+
   if (pin_value == 0) {
     dah_buffer = 1;
 
@@ -353,53 +330,48 @@ void check_dah_paddle()
   }
 }
 
-
 #warning WHY THE FLOATS
-void send_dit(byte sending_type)
+void send_dit()
 {
   unsigned int character_wpm = configuration.wpm;
 
   being_sent = SENDING_DIT;
-  tx_and_sidetone_key(1,sending_type);
+  tx_and_sidetone_key(1);
 
-  loop_element_lengths((1.0*(float(configuration.weighting)/50)),keying_compensation,character_wpm,sending_type);
-  
-  tx_and_sidetone_key(0,sending_type);
+  loop_element_lengths((1.0*(float(configuration.weighting)/50)),keying_compensation,character_wpm);
 
-  loop_element_lengths((2.0-(float(configuration.weighting)/50)),(-1.0*keying_compensation),character_wpm,sending_type);
+  tx_and_sidetone_key(0);
+
+  loop_element_lengths((2.0-(float(configuration.weighting)/50)),(-1.0*keying_compensation),character_wpm);
 
   #ifdef FEATURE_COMMAND_LINE_INTERFACE
-  if ((cli_paddle_echo) && (sending_type == MANUAL_SENDING)) {
+  if (cli_paddle_echo) {
     cli_paddle_echo_buffer = (cli_paddle_echo_buffer * 10) + 1;
     cli_paddle_echo_buffer_decode_time = millis() + (float((cw_echo_timing_factor*1200.0)/configuration.wpm)*length_letterspace);
-  
   }
   #endif
 
   being_sent = SENDING_NOTHING;
-  last_sending_type = sending_type;
-  
-  
+
   check_paddles();
 
 }
 
-
-void send_dah(byte sending_type)
+void send_dah()
 {
   unsigned int character_wpm = configuration.wpm;
 
   being_sent = SENDING_DAH;
-  tx_and_sidetone_key(1,sending_type);
+  tx_and_sidetone_key(1);
 
-  loop_element_lengths((float(configuration.dah_to_dit_ratio/100.0)*(float(configuration.weighting)/50)),keying_compensation,character_wpm,sending_type);
+  loop_element_lengths((float(configuration.dah_to_dit_ratio/100.0)*(float(configuration.weighting)/50)),keying_compensation,character_wpm);
 
-  tx_and_sidetone_key(0,sending_type);
+  tx_and_sidetone_key(0);
 
-  loop_element_lengths((4.0-(3.0*(float(configuration.weighting)/50))),(-1.0*keying_compensation),character_wpm,sending_type);
+  loop_element_lengths((4.0-(3.0*(float(configuration.weighting)/50))),(-1.0*keying_compensation),character_wpm);
 
   #ifdef FEATURE_COMMAND_LINE_INTERFACE
-  if ((cli_paddle_echo) && (sending_type == MANUAL_SENDING)) {
+  if (cli_paddle_echo) {
     cli_paddle_echo_buffer = (cli_paddle_echo_buffer * 10) + 2;
     cli_paddle_echo_buffer_decode_time = millis() + (float((cw_echo_timing_factor*1200.0)/configuration.wpm)*length_letterspace);
   }
@@ -408,12 +380,10 @@ void send_dah(byte sending_type)
   check_paddles();
 
   being_sent = SENDING_NOTHING;
-  last_sending_type = sending_type;
 }
 
-
 #warning WHY IS THIS SO COMPLICATED
-void tx_and_sidetone_key (int state, byte sending_type)
+void tx_and_sidetone_key (int state)
 {
   if ((state) && (key_state == 0)) {
     if (key_tx) {
@@ -424,9 +394,7 @@ void tx_and_sidetone_key (int state, byte sending_type)
         delay(first_extension_time);
       }
     }
-    if ((configuration.sidetone_mode == SIDETONE_ON) || (machine_mode == COMMAND) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_type == MANUAL_SENDING))) {
-      tone(sidetone_line, configuration.hz_sidetone);
-    }
+    tone(sidetone_line, configuration.hz_sidetone);
     key_state = 1;
   } else {
     if ((state == 0) && (key_state)) {
@@ -434,17 +402,14 @@ void tx_and_sidetone_key (int state, byte sending_type)
         if (current_tx_key_line) {digitalWrite (current_tx_key_line, LOW);}
         ptt_key();
       }
-      if ((configuration.sidetone_mode == SIDETONE_ON) || (machine_mode == COMMAND) || ((configuration.sidetone_mode == SIDETONE_PADDLE_ONLY) && (sending_type == MANUAL_SENDING))) {
-        noTone(sidetone_line);
-      }
+      noTone(sidetone_line);
       key_state = 0;
     }
   }
 }
 
-
 #warning WHY ARE THERE SO MANY FLOATS HERE?!?!?!?!?
-void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm_in, byte sending_type)
+void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm_in)
 {
   if ((lengths == 0) or (lengths < 0)) {
     return;
@@ -456,11 +421,11 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
 
   unsigned long endtime = millis() + long(element_length*lengths) + long(additional_time_ms);
   while ((millis() < endtime) && (millis() > 200)) {  // the second condition is to account for millis() rollover
-    
+
     if ((configuration.keyer_mode == IAMBIC_A) && (paddle_pin_read(paddle_left) == LOW ) && (paddle_pin_read(paddle_right) == LOW )) {
         iambic_flag = 1;
-    }    
-   
+    }
+
     if (being_sent == SENDING_DIT) {
       check_dah_paddle();
     } else {
@@ -468,29 +433,20 @@ void loop_element_lengths(float lengths, float additional_time_ms, int speed_wpm
         check_dit_paddle();
       }
     }
-
-    // blow out prematurely if we're automatic sending and a paddle gets hit
-    if (sending_type == AUTOMATIC_SENDING && (paddle_pin_read(paddle_left) == LOW || paddle_pin_read(paddle_right) == LOW || dit_buffer || dah_buffer)) {
-      if (machine_mode == NORMAL) {
-        return;
-      }
-    }   
  }
- 
+
   if ((configuration.keyer_mode == IAMBIC_A) && (iambic_flag) && (paddle_pin_read(paddle_left) == HIGH ) && (paddle_pin_read(paddle_right) == HIGH )) {
       iambic_flag = 0;
       dit_buffer = 0;
       dah_buffer = 0;
-  }    
+  }
 }
-
 
 void speed_set(int wpm_set)
 {
     configuration.wpm = wpm_set;
     config_dirty = 1;
 }
-
 
 long get_cw_input_from_user(unsigned int exit_time_milliseconds)
 {
@@ -504,14 +460,14 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds)
     check_paddles();
 
     if (dit_buffer) {
-      send_dit(MANUAL_SENDING);
+      send_dit();
       dit_buffer = 0;
       paddle_hit = 1;
       cw_char = (cw_char * 10) + 1;
       last_element_time = millis();
     }
     if (dah_buffer) {
-      send_dah(MANUAL_SENDING);
+      send_dah();
       dah_buffer = 0;
       paddle_hit = 1;
       cw_char = (cw_char * 10) + 2;
@@ -533,7 +489,6 @@ long get_cw_input_from_user(unsigned int exit_time_milliseconds)
   return cw_char;
 }
 
-
 void switch_to_tx_silent(byte tx)
 {
   switch (tx) {
@@ -541,9 +496,8 @@ void switch_to_tx_silent(byte tx)
    case 2: if ((ptt_tx_2) || (tx_key_line_2)) { configuration.current_ptt_line = ptt_tx_2; current_tx_key_line = tx_key_line_2; configuration.current_tx = 2; config_dirty = 1; } break;
    case 3: if ((ptt_tx_3) || (tx_key_line_3)) { configuration.current_ptt_line = ptt_tx_3; current_tx_key_line = tx_key_line_3; configuration.current_tx = 3; config_dirty = 1; } break;
   }
-  
-}
 
+}
 
 void service_dit_dah_buffers()
 {
@@ -554,15 +508,14 @@ void service_dit_dah_buffers()
   } else {
     if (dit_buffer) {
       dit_buffer = 0;
-      send_dit(MANUAL_SENDING);
+      send_dit();
     }
     if (dah_buffer) {
       dah_buffer = 0;
-      send_dah(MANUAL_SENDING);
+      send_dah();
     }
   }
 }
-
 
 void beep()
 {
@@ -570,9 +523,7 @@ void beep()
 }
 void boop()
 {
-  tone(sidetone_line, hz_low_beep);
-  delay(100);
-  noTone(sidetone_line);
+  tone(sidetone_line, hz_low_beep, 100);
 }
 
 /*
@@ -581,9 +532,9 @@ void boop()
 void send_the_dits_and_dahs(const char * cw_to_send){
   for (int x = 0;x < 12;x++){
     switch(cw_to_send[x]){
-      case '.': send_dit(AUTOMATIC_SENDING); break;
-      case '-': send_dah(AUTOMATIC_SENDING); break;
-      case ' ': loop_element_lengths((configuration.length_wordspace-length_letterspace-2),0,configuration.wpm,AUTOMATIC_SENDING); break;
+      case '.': send_dit(); break;
+      case '-': send_dah(); break;
+      case ' ': loop_element_lengths((configuration.length_wordspace-length_letterspace-2),0,configuration.wpm); break;
       default: return; break;
     }
     if ((dit_buffer) || (dah_buffer)){
@@ -626,8 +577,8 @@ const char* MORSE_CODE[] = {
 ".-.-.",   // < (AR)
 "-...-",   // =
 "...-.-",  // > (SK)
-"..--.."   // ? (actually)
-".--.-."   // @ (AC)
+"..--..",   // ? (actually)
+".--.-.",   // @ (AC)
 ".-",      // A
 "-...",
 "-.-.",
@@ -668,10 +619,9 @@ void send_char(unsigned char cw_char, byte omit_letterspace)
   }
 
   if (omit_letterspace != OMIT_LETTERSPACE) {
-    loop_element_lengths((length_letterspace-1),0,configuration.wpm,AUTOMATIC_SENDING);
+    loop_element_lengths((length_letterspace-1),0,configuration.wpm);
   }
 }
-
 
 /*
  * ASCII lowercase -> uppercase.
@@ -684,12 +634,11 @@ int uppercase (int charbytein)
   return charbytein;
 }
 
-
 #warning WHY IS THIS SO COMPLICATED
 /*
  * Process the CW send buffer.
  */
-void service_send_buffer(byte no_print)
+void service_send_buffer()
 {
   // send one character out of the send buffer
   // values 200 and above do special things
@@ -760,7 +709,7 @@ void service_send_buffer(byte no_print)
           remove_from_send_buffer();
           if (send_buffer_bytes > 0) {
             send_buffer_status = SERIAL_SEND_BUFFER_TIMED_COMMAND;
-            tx_and_sidetone_key(1,AUTOMATIC_SENDING);
+            tx_and_sidetone_key(1);
             timed_command_end_time = millis() + (send_buffer_array[0] * 1000);
             timed_command_in_progress = SERIAL_SEND_BUFFER_TIMED_KEY_DOWN;
             remove_from_send_buffer();
@@ -791,11 +740,11 @@ void service_send_buffer(byte no_print)
         }
       } else {
         #if defined(FEATURE_SERIAL)
-        if ((!no_print) && (!cw_send_echo_inhibit)){
+        if (!cw_send_echo_inhibit || send_buffer_array[0] == 13 || send_buffer_array[0] == 32){
           main_serial_port->write(send_buffer_array[0]);
-          if (send_buffer_array[0] == 13) {
-            main_serial_port->write(10);  // if we got a carriage return, also send a line feed
-          }
+        }
+        if (send_buffer_array[0] == 13) {
+          main_serial_port->write(10);  // if we got a carriage return, also send a line feed
         }
         #endif //FEATURE_SERIAL
         send_char(send_buffer_array[0],NORMAL);
@@ -808,7 +757,7 @@ void service_send_buffer(byte no_print)
     if (send_buffer_status == SERIAL_SEND_BUFFER_TIMED_COMMAND) {    // we're in a timed command
 
       if ((timed_command_in_progress == SERIAL_SEND_BUFFER_TIMED_KEY_DOWN) && (millis() > timed_command_end_time)) {
-        tx_and_sidetone_key(0,AUTOMATIC_SENDING);
+        tx_and_sidetone_key(0);
         timed_command_in_progress = 0;
         send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
       }
@@ -841,10 +790,9 @@ void service_send_buffer(byte no_print)
     clear_send_buffer();
     send_buffer_status = SERIAL_SEND_BUFFER_NORMAL;
     dit_buffer = 0;
-    dah_buffer = 0;    
+    dah_buffer = 0;
   }
 }
-
 
 /*
  * Clear the CW send buffer.
@@ -868,7 +816,6 @@ void remove_from_send_buffer()
     }
   }
 }
-
 
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
 /*
@@ -894,8 +841,8 @@ void add_to_send_buffer(byte incoming_serial_byte)
  */
 void service_command_line_interface()
 {
-  static byte cli_wait_for_cr_flag = 0; 
-  
+  static byte cli_wait_for_cr_flag = 0;
+
   if (serial_backslash_command == 0) {
     incoming_serial_byte = uppercase(incoming_serial_byte);
     if (incoming_serial_byte != 92) { // we do not have a backslash
@@ -931,15 +878,13 @@ void service_command_line_interface()
 }
 #endif //FEATURE_COMMAND_LINE_INTERFACE
 
-
-
 #if defined(FEATURE_SERIAL)
 void check_serial(){
   // Reminder to Goody: multi-parameter commands must be nested in if-then-elses (see PTT command for example)
 
   while (main_serial_port->available() > 0) {
     incoming_serial_byte = main_serial_port->read();
-    
+
     #ifndef FEATURE_COMMAND_LINE_INTERFACE
     //incoming_serial_byte = main_serial_port->read();
     main_serial_port->println(F("No serial features enabled..."));
@@ -947,13 +892,12 @@ void check_serial(){
 
     // yea, this is a bit funky below
 
-    #ifdef FEATURE_COMMAND_LINE_INTERFACE    
+    #ifdef FEATURE_COMMAND_LINE_INTERFACE
     service_command_line_interface();
     #endif //FEATURE_COMMAND_LINE_INTERFACE
   }
 }
 #endif
-
 
 #if defined(FEATURE_SERIAL_HELP)
 #if defined(FEATURE_SERIAL)
@@ -967,30 +911,27 @@ void print_serial_help(){
   main_serial_port->println(F("\\W#[#][#]\t: Change WPM to ###"));
   main_serial_port->println(F("\\X#\t\t: Switch to transmitter #"));
   main_serial_port->println(F("\\*\t\t: Toggle paddle echo"));
-  main_serial_port->println(F("\\:\t\t: Toggle CW echo"));
   main_serial_port->println(F("\\\\\t\t: Empty keyboard send buffer"));
 }
 #endif //FEATURE_COMMAND_LINE_INTERFACE
 #endif //FEATURE_SERIAL
 #endif //FEATURE_SERIAL_HELP
 
-
 #if defined(FEATURE_SERIAL)
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
 void process_serial_command() {
   main_serial_port->println();
   switch (incoming_serial_byte) {
-    case 42:                                                // * - paddle echo on / off
-      if (cli_paddle_echo) {
-        cli_paddle_echo = 0;
-      } else {
-        cli_paddle_echo = 1;
-      }
+    case 42: // * - paddle echo on / off
+       cli_paddle_echo = 1 - cli_paddle_echo;
+       cw_send_echo_inhibit = 1 - cw_send_echo_inhibit;
       break;
     case 43: cli_prosign_flag = 1; break;
     #if defined(FEATURE_SERIAL_HELP)
     case 63: print_serial_help(); break;                         // ? = print help
     #endif //FEATURE_SERIAL_HELP
+    case 65: configuration.keyer_mode = IAMBIC_A; config_dirty = 1; main_serial_port->println(F("Iambic A")); break;    // A - Iambic A mode
+    case 66: configuration.keyer_mode = IAMBIC_B; config_dirty = 1; main_serial_port->println(F("Iambic B")); break;    // B - Iambic B mode
     case 70: serial_set_sidetone_freq(); break;                                   // F - set sidetone frequency
     case 83: serial_status(); break;                                              // S - Status command
     case 78:                                                                // N - paddle reverse
@@ -1007,16 +948,12 @@ void process_serial_command() {
     case 87: serial_wpm_set();break;                                        // W - set WPM
     case 88: serial_switch_tx();break;                                      // X - switch transmitter
     case 92: clear_send_buffer(); break;  // \ - clear CW send buffer
-    case ':':
-      cw_send_echo_inhibit = 1 - cw_send_echo_inhibit;
-      break;
     default: main_serial_port->println(F("Unknown command")); break;
   }
 
 }
 #endif //FEATURE_SERIAL
 #endif //FEATURE_COMMAND_LINE_INTERFACE
-
 
 #if defined(FEATURE_SERIAL)
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
@@ -1041,7 +978,6 @@ void service_serial_paddle_echo()
 #endif
 #endif
 
-
 #if defined(FEATURE_SERIAL)
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
 /*
@@ -1062,7 +998,7 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit)
       if (machine_mode == NORMAL) {          // might as well do something while we're waiting
         check_paddles();
         service_dit_dah_buffers();
-        service_send_buffer(PRINTCHAR);
+        service_send_buffer();
 
         check_ptt_tail();
       }
@@ -1109,7 +1045,6 @@ int serial_get_number_input(byte places,int lower_limit, int upper_limit)
 #endif
 #endif
 
-
 #if defined(FEATURE_SERIAL)
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
 void serial_switch_tx()
@@ -1142,7 +1077,6 @@ void serial_set_sidetone_freq()
 #endif
 #endif
 
-
 #if defined(FEATURE_SERIAL)
 #ifdef FEATURE_COMMAND_LINE_INTERFACE
 void serial_wpm_set()
@@ -1165,33 +1099,31 @@ void serial_wpm_set()
  */
 void serial_status()
 {
-  main_serial_port->print(F("Mode: "));
-  switch (configuration.keyer_mode) {
-    case IAMBIC_A: main_serial_port->print(F("Iambic A")); break;
-    case IAMBIC_B: main_serial_port->print(F("Iambic B")); 
-      break;
-    case STRAIGHT: main_serial_port->print(F("Straightkey")); break;
+  main_serial_port->print(F("Paddles: "));
+  if (configuration.paddle_mode == PADDLE_NORMAL) {
+    main_serial_port->println(F("normal"));
+  } else {
+    main_serial_port->println(F("reversed"));
   }
 
-  main_serial_port->println();
+  main_serial_port->print(F("Mode: "));
+  switch (configuration.keyer_mode) {
+    case IAMBIC_A: main_serial_port->println(F("Iambic A")); break;
+    case IAMBIC_B: main_serial_port->println(F("Iambic B")); break;
+  }
+
   main_serial_port->print(F("WPM: "));
   main_serial_port->println(configuration.wpm,DEC);
 
-  main_serial_port->print(F("Sidetone:"));
-  switch (configuration.sidetone_mode) {
-    case SIDETONE_ON: main_serial_port->print(F("ON")); break;
-    case SIDETONE_OFF: main_serial_port->print(F("OFF")); break;
-    case SIDETONE_PADDLE_ONLY: main_serial_port->print(F("Paddle Only")); break;
-  }
-  main_serial_port->print(" ");
+  main_serial_port->print(F("Sidetone: "));
   main_serial_port->print(configuration.hz_sidetone,DEC);
   main_serial_port->println(" Hz");
+
   main_serial_port->print("TX: ");
-  main_serial_port->println(configuration.current_tx);  
+  main_serial_port->println(configuration.current_tx);
 }
 #endif
 #endif
-
 
 #warning is this really necessary
 /*
@@ -1239,7 +1171,7 @@ int convert_cw_number_to_ascii (long number_in)
    case 22221: return 57; break;
    case 112211: return '?'; break;  // ?
    case 21121: return 47; break;   // /
-   case 2111212: return '*'; break; // BK   
+   case 2111212: return '*'; break; // BK
    case 221122: return 44; break;  // ,
    case 121212: return '.'; break;
    case 122121: return '@'; break;
@@ -1249,13 +1181,12 @@ int convert_cw_number_to_ascii (long number_in)
    case 21112: return '='; break;
    case 12121: return '+'; break;
 
-   default: 
+   default:
      boop();
-     return unknown_cw_character; 
+     return unknown_cw_character;
      break;
  }
 }
-
 
 /*
  * Initialize ~~~ALL THE PINS~~~
@@ -1267,7 +1198,7 @@ void initialize_pins()
   digitalWrite (paddle_left, HIGH);
   pinMode (paddle_right, INPUT);
   digitalWrite (paddle_right, HIGH);
-  
+
   if (tx_key_line_1) {
     pinMode (tx_key_line_1, OUTPUT);
     digitalWrite (tx_key_line_1, LOW);
@@ -1280,7 +1211,7 @@ void initialize_pins()
     pinMode (tx_key_line_3, OUTPUT);
     digitalWrite (tx_key_line_3, LOW);
   }
-  
+
   if (ptt_tx_1) {
     pinMode (ptt_tx_1, OUTPUT);
     digitalWrite (ptt_tx_1, LOW);
@@ -1302,7 +1233,6 @@ void initialize_pins()
   digitalWrite(13, LOW);
 }
 
-
 /*
  * Initialize the configuration to defaults.
  */
@@ -1313,24 +1243,21 @@ void initialize_keyer_state()
   configuration.wpm = initial_speed_wpm;
 
   configuration.hz_sidetone = initial_sidetone_freq;
-  configuration.memory_repeat_time = default_memory_repeat_time;
-  
+
   configuration.dah_to_dit_ratio = initial_dah_to_dit_ratio;
   configuration.length_wordspace = default_length_wordspace;
   configuration.weighting = default_weighting;
-  
+
   switch_to_tx_silent(1);
 
   machine_mode = NORMAL;
   configuration.paddle_mode = PADDLE_NORMAL;
-  configuration.keyer_mode = IAMBIC_B;
-  configuration.sidetone_mode = SIDETONE_ON;
-  
+  configuration.keyer_mode = IAMBIC_A;
+
   delay(100);
-}  
+}
 
-
-/* 
+/*
  * Either load config from EEPROM or overwrite it with defaults.
  */
 void check_eeprom_for_initialization()
@@ -1351,19 +1278,6 @@ void check_eeprom_for_initialization()
   }
 }
 
-
-/* 
- * Check for beacon mode (paddle_left == low)   [DISABLED --CL]  or straight key mode (paddle_right == low)
- */
-void check_for_beacon_mode(){
-  if (paddle_pin_read(paddle_left) == LOW) {
-      ; /* do nothing (beacon mode has been removed) --CL */
-  } else if (paddle_pin_read(paddle_right) == LOW) {
-      configuration.keyer_mode = STRAIGHT;
-  }
-}
-
-
 /*
  * Open the serial port and write boot message.
  */
@@ -1373,7 +1287,6 @@ void initialize_serial_port()
   #if defined(FEATURE_SERIAL)
 
   #if defined(FEATURE_COMMAND_LINE_INTERFACE)
-  serial_mode = SERIAL_NORMAL;
   serial_baud_rate = default_serial_baud_rate;
   #endif  //defined(FEATURE_COMMAND_LINE_INTERFACE)
 
@@ -1381,23 +1294,20 @@ void initialize_serial_port()
   main_serial_port->begin(serial_baud_rate);
 
   #if !defined(OPTION_SUPPRESS_SERIAL_BOOT_MSG) && defined(FEATURE_COMMAND_LINE_INTERFACE)
-  if (serial_mode == SERIAL_NORMAL) {
-    main_serial_port->print(F("\n\rK3NG Keyer Version "));
-    main_serial_port->write(CODE_VERSION);
-    main_serial_port->println();
-    #if defined(FEATURE_SERIAL_HELP)
-    main_serial_port->println(F("\n\rEnter \\? for help\n"));
-    #endif
-  }
+  main_serial_port->print(F("\n\rK3NG Keyer Version "));
+  main_serial_port->write(CODE_VERSION);
+  main_serial_port->println();
+  #if defined(FEATURE_SERIAL_HELP)
+  main_serial_port->println(F("\n\rEnter \\? for help\n"));
+  #endif
   #endif //!defined(OPTION_SUPPRESS_SERIAL_BOOT_MSG) && defined(FEATURE_COMMAND_LINE_INTERFACE)
 
   #endif //FEATURE_SERIAL
 }
 
-
 /*
  * Read a paddle pin.
- * 
+ *
  * (originally also supported capacitive touch paddles)
  */
 int paddle_pin_read(int pin_to_read)
